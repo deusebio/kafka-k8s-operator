@@ -5,6 +5,7 @@
 """Charmed Machine Operator for Apache Kafka."""
 
 import logging
+from typing import Optional
 
 from charms.rolling_ops.v0.rollingops import RollingOpsManager
 from ops.charm import (
@@ -23,7 +24,7 @@ from auth import KafkaAuth
 from config import KafkaConfig
 from literals import CHARM_KEY, CHARM_USERS, PEER, ZOOKEEPER_REL_NAME
 from provider import KafkaProvider
-from utils import broker_active, generate_password
+from utils import broker_active, failure_handler, generate_password
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,9 @@ class KafkaK8sCharm(CharmBase):
         )
 
         self.framework.observe(getattr(self.on, "set_password_action"), self._set_password_action)
+        self.framework.observe(
+            getattr(self.on, "create_client_user_action"), self._create_client_user
+        )
 
     @property
     def container(self) -> Container:
@@ -117,9 +121,9 @@ class KafkaK8sCharm(CharmBase):
             event.defer()
             return
 
-        logger.info(f"Server properties: {self.kafka_config.server_properties}")
-        logger.info(f"JAAS: {self.kafka_config.jaas}")
-        logger.info(f"Kafka Pebble Layer: {self._kafka_layer}")
+        logger.debug(f"Server properties: {self.kafka_config.server_properties}")
+        logger.debug(f"JAAS: {self.kafka_config.jaas}")
+        logger.debug(f"Kafka Pebble Layer: {self._kafka_layer}")
 
         # start kafka service
         self.container.add_layer(CHARM_KEY, self._kafka_layer, combine=True)
@@ -190,30 +194,39 @@ class KafkaK8sCharm(CharmBase):
         self.container.stop(CHARM_KEY)
         self.unit.status = BlockedStatus("missing required zookeeper relation")
 
+    @failure_handler(logger)
+    def _create_client_user(self, event: ActionEvent):
+        username = event.params["username"]
+        password = self._create_new_user(username, event.params.get("password", None))
+        return {f"{username}-password": password}
+
+    @failure_handler(logger)
     def _set_password_action(self, event: ActionEvent):
         """Handler for set-password action.
 
         Set the password for a specific user, if no passwords are passed, generate them.
         """
-        if not self.unit.is_leader():
-            msg = "Password rotation must be called on leader unit"
-            logger.error(msg)
-            event.fail(msg)
-            return
-
         username = event.params.get("username", "sync")
+
         if username not in CHARM_USERS:
             msg = f"The action can be run only for users used by the charm: {CHARM_USERS} not {username}."
-            logger.error(msg)
-            event.fail(msg)
-            return
+            raise ValueError(msg)
 
-        new_password = event.params.get("password", generate_password())
+        password = self._create_new_user("sync", event.params.get("password", None))
 
-        if new_password == self.kafka_config.sync_password:
-            event.log("The old and new passwords are equal.")
-            event.set_results({f"{username}-password": new_password})
-            return
+        return {f"{username}-password": password}
+
+    def _create_new_user(self, username: str, optional_password: Optional[str]) -> str:
+        if not self.unit.is_leader():
+            raise AssertionError("Password handling must be called on leader unit")
+
+        existing_password = self.peer_relation.data[self.app].get(f"{username}_password", None)
+
+        password = optional_password if optional_password is not None else generate_password()
+
+        if password == existing_password:
+            logger.info("Provided password is equal to the current password. Nothing to be done")
+            return existing_password
 
         # Update the user
         kafka_auth = KafkaAuth(
@@ -221,16 +234,12 @@ class KafkaK8sCharm(CharmBase):
             zookeeper=self.kafka_config.zookeeper_config.get("connect", ""),
             container=self.container,
         )
-        try:
-            kafka_auth.add_user(username="sync", password=new_password)
-        except ExecError as e:
-            logger.error(str(e))
-            event.fail(str(e))
-            return
+
+        kafka_auth.add_user(username=username, password=password)
 
         # Store the password on application databag
-        self.peer_relation.data[self.app].update({f"{username}_password": new_password})
-        event.set_results({f"{username}-password": new_password})
+        self.peer_relation.data[self.app].update({f"{username}_password": password})
+        return password
 
     def _restart(self, event: EventBase) -> None:
         """Handler for `rolling_ops` restart events."""

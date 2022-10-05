@@ -13,3 +13,13 @@ set-password:
     password:
       type: string
       description: The password will be auto-generated if this option is not specified.
+
+create-client-user:
+  description: Create a new user to be used for external clients
+  params:
+    username:
+      type: string
+      description: The chosen username
+    password:
+      type: string
+      description: The password will be auto-generated if this option is not specified.

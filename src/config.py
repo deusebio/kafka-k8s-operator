@@ -178,8 +178,6 @@ class KafkaConfig:
             f'listener.name.external.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="sync" password="{self.sync_password}";',
         ]
 
-        logger.info(output)
-
         return output
 
     @property

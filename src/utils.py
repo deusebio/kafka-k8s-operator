@@ -7,10 +7,14 @@
 import logging
 import secrets
 import string
-from typing import Dict, List, Set
+import typing
+from functools import wraps
+from logging import Logger
+from typing import Callable, Dict, List, Set
 
 from charms.zookeeper.v0.client import ZooKeeperManager
 from kazoo.exceptions import AuthFailedError, NoNodeError
+from ops.charm import ActionEvent, CharmBase
 from ops.model import Container, Unit
 from ops.pebble import ExecError
 from tenacity import retry
@@ -106,3 +110,21 @@ def run_bin_command(
     except (ExecError) as e:
         logger.debug(f"cmd failed:\ncommand={e.command}\nstdout={e.stdout}\nstderr={e.stderr}")
         raise e
+
+
+def failure_handler(logger: Logger):
+    """Return decorator for handling errors in Actions."""
+
+    def decorator(charm_method: Callable[[CharmBase, ActionEvent], typing.Mapping]):
+        @wraps(charm_method)
+        def wrapper(charm: CharmBase, event: ActionEvent):
+            try:
+                result = charm_method(charm, event)
+                event.set_results(result)
+            except Exception as e:
+                logger.error(str(e))
+                event.fail(f"Occurred exception {type(e)} with message {str(e)}")
+
+        return wrapper
+
+    return decorator
