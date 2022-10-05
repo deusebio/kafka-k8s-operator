@@ -65,7 +65,7 @@ def test_extra_args(harness):
 
 def test_bootstrap_server(harness):
     peer_relation_id = harness.charm.model.get_relation("cluster").id
-    harness.add_relation_unit(peer_relation_id, "kafka/1")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/1")
 
     assert len(harness.charm.kafka_config.bootstrap_server) == 2
     for server in harness.charm.kafka_config.bootstrap_server:
@@ -82,11 +82,11 @@ def test_default_replication_properties_less_than_three(harness):
 
 def test_default_replication_properties_more_than_three(harness):
     peer_relation_id = harness.charm.model.get_relation("cluster").id
-    harness.add_relation_unit(peer_relation_id, "kafka/1")
-    harness.add_relation_unit(peer_relation_id, "kafka/2")
-    harness.add_relation_unit(peer_relation_id, "kafka/3")
-    harness.add_relation_unit(peer_relation_id, "kafka/4")
-    harness.add_relation_unit(peer_relation_id, "kafka/5")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/1")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/2")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/3")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/4")
+    harness.add_relation_unit(peer_relation_id, "kafka-k8s/5")
 
     assert "num.partitions=3" in harness.charm.kafka_config.default_replication_properties
     assert (
@@ -95,7 +95,7 @@ def test_default_replication_properties_more_than_three(harness):
     assert "min.insync.replicas=2" in harness.charm.kafka_config.default_replication_properties
 
 
-def test_auth_properties(zk_relation_id, harness):
+def test_auth_properties(zk_relation_id, harness, mocker):
     peer_relation_id = harness.charm.model.get_relation("cluster").id
     harness.update_relation_data(
         peer_relation_id, harness.charm.app.name, {"sync_password": "mellon"}
@@ -112,13 +112,15 @@ def test_auth_properties(zk_relation_id, harness):
         },
     )
 
+    mocker.patch("socket.gethostbyname", lambda x: "0.0.0.0")
+
     assert "broker.id=0" in harness.charm.kafka_config.auth_properties
     assert (
         f"zookeeper.connect={harness.charm.kafka_config.zookeeper_config['connect']}"
         in harness.charm.kafka_config.auth_properties
     )
     assert (
-        'listener.name.sasl_plaintext.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="sync" password="mellon";'
+        'listener.name.internal.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="sync" password="mellon";'
         in harness.charm.kafka_config.auth_properties
     )
 

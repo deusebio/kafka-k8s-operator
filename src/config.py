@@ -162,10 +162,12 @@ class KafkaConfig:
 
         broker_id = unit.name.split("/")[1]
 
-        listeners = ",".join([
-            f"INTERNAL://{self.get_host_from_unit(unit)}:29092",
-            f"EXTERNAL://{self.get_ip_address_from_unit(unit)}:9092"
-        ])
+        listeners = ",".join(
+            [
+                f"INTERNAL://{self.get_host_from_unit(unit)}:29092",
+                f"EXTERNAL://{self.get_ip_address_from_unit(unit)}:9092",
+            ]
+        )
 
         output = [
             f"broker.id={broker_id}",
@@ -214,13 +216,14 @@ class KafkaConfig:
         Returns:
             List of properties to be set
         """
-        return ([
-                    f"data.dir={self.charm.config['data-dir']}",
-                    f"log.dir={self.charm.config['log-dir']}",
-                    f"offsets.retention.minutes={self.charm.config['offsets-retention-minutes']}",
-                    f"log.retention.hours={self.charm.config['log-retention-hours']}",
-                    f"auto.create.topics={self.charm.config['auto-create-topics']}",
-                    f"super.users={self.super_users}",
+        return (
+            [
+                f"data.dir={self.charm.config['data-dir']}",
+                f"log.dir={self.charm.config['log-dir']}",
+                f"offsets.retention.minutes={self.charm.config['offsets-retention-minutes']}",
+                f"log.retention.hours={self.charm.config['log-retention-hours']}",
+                f"auto.create.topics={self.charm.config['auto-create-topics']}",
+                f"super.users={self.super_users}",
             ]
             + self.default_replication_properties
             + self.auth_properties
@@ -242,7 +245,7 @@ class KafkaConfig:
 
     @property
     def jaas(self) -> str:
-        """Provide the JAAS setting through a property"""
+        """Provide the JAAS setting via property."""
         return f"""
             Client {{
                 org.apache.zookeeper.server.auth.DigestLoginModule required
