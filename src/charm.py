@@ -117,6 +117,10 @@ class KafkaK8sCharm(CharmBase):
             event.defer()
             return
 
+        logger.info(f"Server properties: {self.kafka_config.server_properties}")
+        logger.info(f"JAAS: {self.kafka_config.jaas}")
+        logger.info(f"Kafka Pebble Layer: {self._kafka_layer}")
+
         # start kafka service
         self.container.add_layer(CHARM_KEY, self._kafka_layer, combine=True)
         self.container.replan()
